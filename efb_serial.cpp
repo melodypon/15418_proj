@@ -1,16 +1,38 @@
 #include <vector>
 #include <algorithm>
 #include <iostream>
+#include <fstream>
 
-
-void read_features(std::vector<std::vector<int> > &features) {
+void read_features(std::vector<std::vector<float> > &features) {
+	// Simple test case
+	/*
 	std::vector<int> f1 = {1,2,3,0,0,0};
 	std::vector<int> f2 = {0,0,0,1,2,2};
 	std::vector<int> f3 = {1,2,3,0,0,0};
 	features = {f1, f2, f3};
+	*/
+
+	// LETOR 4.0 Datasets
+	for (int i = 0; i < 46; i++) {
+		features.push_back(std::vector<float>());
+	}
+	std::string line;
+	std::ifstream infile("Querylevelnorm.txt");
+
+	while(getline(infile, line)) {
+		std::size_t found = 0;
+		int i = 0;
+		while (found != std::string::npos) {
+			found = line.find(":", found + 1);
+			features[i].push_back(std::stof(line.substr(found + 1, found + 9)));
+	        i++;
+	    }
+    }
+    std::cout << features.size() << std::endl;
+    std::cout << features[0].size() << std::endl;
 }
 
-int count_conflict(std::vector<int> &f1, std::vector<int> &f2) {
+int count_conflict(std::vector<float> &f1, std::vector<float> &f2) {
 	int size = f1.size();
 	int conflict = 0;
 	for (int i = 0; i < size; i++) {
@@ -21,7 +43,7 @@ int count_conflict(std::vector<int> &f1, std::vector<int> &f2) {
 	return conflict;
 }
 
-void build_graph(std::vector<std::vector<int> > &graph, std::vector<std::vector<int> > &features) {
+void build_graph(std::vector<std::vector<int> > &graph, std::vector<std::vector<float> > &features) {
 	int num_features = features.size();
 
 	for (int i = 0; i < num_features; i++) {
@@ -52,7 +74,7 @@ void sort_order(std::vector<std::vector<int> > &graph, std::vector<int> &order) 
 	}
 }
 
-int union_conflicts(std::vector<int> &conflicts, std::vector<int> &features) {
+int union_conflicts(std::vector<float> &conflicts, std::vector<float> &features) {
 	int size = conflicts.size();
 	int count = 0;
 
@@ -64,9 +86,9 @@ int union_conflicts(std::vector<int> &conflicts, std::vector<int> &features) {
 	return count;
 }
 
-void bundle_features(std::vector<int> &order, int max_conflict, std::vector<std::vector<int> > &features, std::vector<std::vector<int> > &bundles) {
+void bundle_features(std::vector<int> &order, int max_conflict, std::vector<std::vector<float> > &features, std::vector<std::vector<int> > &bundles) {
 	int num_features = order.size();
-	std::vector<std::vector<int> > bundle_conflicts;
+	std::vector<std::vector<float> > bundle_conflicts;
 	std::vector<int> bundle_conflict_counts;
 	for (int i = 0; i < num_features; i++) {
 		bool need_new = true;
@@ -89,7 +111,7 @@ void bundle_features(std::vector<int> &order, int max_conflict, std::vector<std:
 	}
 }
 
-int num_of_bin(std::vector<int> &feature) {
+float num_of_bin(std::vector<float> &feature) {
 	int max = 0;
 	for (auto i: feature) {
 		max = (i > max) ? i : max;
@@ -97,19 +119,19 @@ int num_of_bin(std::vector<int> &feature) {
 	return max;
 }
 
-void merge_features(std::vector<std::vector<int> > &features, std::vector<std::vector<int> > &bundles, std::vector<std::vector<int> > &new_features) {
+void merge_features(std::vector<std::vector<float> > &features, std::vector<std::vector<int> > &bundles, std::vector<std::vector<float> > &new_features) {
 	int num_data = features[0].size();
 	
 	for (auto F: bundles) {
-		std::vector<int> bin_range = {0};
-		int total_bin = 0;
+		std::vector<float> bin_range = {0};
+		float total_bin = 0;
 		for (auto f: F) {
 			total_bin += num_of_bin(features[f]);
 			bin_range.push_back(total_bin);
 		}
-		std::vector<int> new_feature;
+		std::vector<float> new_feature;
 		for (int i = 0; i < num_data; i++) {
-			int new_bin = 0;
+			float new_bin = 0;
 			for (int j = 0; j < F.size(); j++) {
 				int f = F[j];
 				if (features[f][i] != 0) {
@@ -124,32 +146,40 @@ void merge_features(std::vector<std::vector<int> > &features, std::vector<std::v
 
 int main(int argc, char* argv[]) {
 	int max_conflict = 2;
-	std::vector<std::vector<int> > features;
+	std::vector<std::vector<float> > features;
 	read_features(features);
 	int num_features = features.size();
 
 	// Greedy Bundle
 	std::vector<std::vector<int> > graph(num_features, std::vector<int>(num_features));
 	build_graph(graph, features);
-	std::cout << "graph" << std::endl;
 
 	std::vector<int> order;
 	sort_order(graph, order);
-	std::cout << "order" << std::endl;
 
 	std::vector<std::vector<int> > bundles;
 	bundle_features(order, max_conflict, features, bundles);
-	std::cout << "bundle" << std::endl;
 
-	// Merge Exclusive Features
-	std::vector<std::vector<int> > new_features;
-	merge_features(features, bundles, new_features);
-
-	for (auto i: new_features) {
-		std::cout << "feature: ";
+	for (auto i: bundles) {
+		std::cout << "bundle: ";
 		for (auto j: i) {
 			std::cout << j << " ";
 		}
 		std::cout << std::endl;
 	}
+
+	// Merge Exclusive Features
+	std::vector<std::vector<float> > new_features;
+	merge_features(features, bundles, new_features);
+
+	std::cout << new_features.size() << std::endl;
+	std::cout << new_features[0].size() << std::endl;
+
+	// for (auto i: new_features) {
+	// 	std::cout << "feature: ";
+	// 	for (auto j: i) {
+	// 		std::cout << j << " ";
+	// 	}
+	// 	std::cout << std::endl;
+	// }
 }
