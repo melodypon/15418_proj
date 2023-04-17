@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <iostream>
 #include <fstream>
+#include "timing.h"
 
 void read_features(std::vector<std::vector<float> > &features) {
 	// Simple test case
@@ -36,7 +37,18 @@ int count_conflict(std::vector<float> &f1, std::vector<float> &f2) {
 	int size = f1.size();
 	int conflict = 0;
 	for (int i = 0; i < size; i++) {
-		if (f1[i] != 0 && f2[i] != 0) {
+		if (f1[i] != 0.0f || f2[i] != 0.0f) {
+			conflict++;
+		}
+	}
+	return conflict;
+}
+
+int count_non_zero(std::vector<float> &f1) {
+	int size = f1.size();
+	int conflict = 0;
+	for (int i = 0; i < size; i++) {
+		if (f1[i] != 0.0f) {
 			conflict++;
 		}
 	}
@@ -79,7 +91,7 @@ int union_conflicts(std::vector<float> &conflicts, std::vector<float> &features)
 	int count = 0;
 
 	for (int i = 0; i < size; i++) {
-		conflicts[i] = (conflicts[i] != 0 || features[i] != 0) ? 1 : 0;
+		conflicts[i] = (conflicts[i] != 0.0f || features[i] != 0.0f) ? 1.0f : 0.0f;
 		count += conflicts[i];
 	}
 
@@ -94,7 +106,7 @@ void bundle_features(std::vector<int> &order, int max_conflict, std::vector<std:
 		bool need_new = true;
 		for (int j = 0; j < bundles.size(); j++) {
 			int count = count_conflict(features[i], bundle_conflicts[j]);
-			if (bundle_conflict_counts[j] + count <= max_conflict) {
+			if (count <= max_conflict) {
 				bundles[j].push_back(i);
 				bundle_conflict_counts[j] = union_conflicts(bundle_conflicts[j], features[i]);
 				need_new = false;
@@ -105,14 +117,19 @@ void bundle_features(std::vector<int> &order, int max_conflict, std::vector<std:
 			std::vector<int> new_bundle;
 			new_bundle.push_back(i);
 			bundles.push_back(new_bundle);
-			bundle_conflicts.push_back(features[i]);
-			bundle_conflict_counts.push_back(0);
+			std::vector<float> conflicts(features[i]);
+			bundle_conflicts.push_back(conflicts);
+			bundle_conflict_counts.push_back(count_non_zero(features[i]));
 		}
 	}
+	// for (auto i: bundle_conflict_counts) {
+	// 	std::cout << i << " ";
+	// }
+	// std::cout << std::endl;
 }
 
 float num_of_bin(std::vector<float> &feature) {
-	int max = 0;
+	float max = 0.0f;
 	for (auto i: feature) {
 		max = (i > max) ? i : max;
 	}
@@ -145,35 +162,49 @@ void merge_features(std::vector<std::vector<float> > &features, std::vector<std:
 }
 
 int main(int argc, char* argv[]) {
-	int max_conflict = 2;
+	int max_conflict = 10000;
 	std::vector<std::vector<float> > features;
 	read_features(features);
 	int num_features = features.size();
 
 	// Greedy Bundle
+	Timer timer1;
 	std::vector<std::vector<int> > graph(num_features, std::vector<int>(num_features));
 	build_graph(graph, features);
+	double t1 = timer1.elapsed();
 
+	Timer timer2;
 	std::vector<int> order;
 	sort_order(graph, order);
+	double t2 = timer2.elapsed();
 
+	Timer timer3;
 	std::vector<std::vector<int> > bundles;
 	bundle_features(order, max_conflict, features, bundles);
+	double t3 = timer3.elapsed();
 
-	for (auto i: bundles) {
-		std::cout << "bundle: ";
-		for (auto j: i) {
-			std::cout << j << " ";
-		}
-		std::cout << std::endl;
-	}
+	// for (auto i: bundles) {
+	// 	std::cout << "bundle: ";
+	// 	for (auto j: i) {
+	// 		std::cout << j << " ";
+	// 	}
+	// 	std::cout << std::endl;
+	// }
 
 	// Merge Exclusive Features
+	Timer timer4;
 	std::vector<std::vector<float> > new_features;
 	merge_features(features, bundles, new_features);
+	double t4 = timer4.elapsed();
 
 	std::cout << new_features.size() << std::endl;
 	std::cout << new_features[0].size() << std::endl;
+
+	printf("TOTAL TIME : %.6fs\n", t1 + t2 + t3 + t4);
+	printf("Build graph: %.6fs\n", t1);
+	printf("Sort order : %.6fs\n", t2);
+	printf("Bundle feat: %.6fs\n", t3);
+	printf("Merge feat : %.6fs\n", t4);
 
 	// for (auto i: new_features) {
 	// 	std::cout << "feature: ";
