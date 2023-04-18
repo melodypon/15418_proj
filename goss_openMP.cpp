@@ -4,6 +4,7 @@
 #include <iostream>
 
 std::vector<float> read_inputs(int NumberCount,int minimum, int maximum) {
+    // used random inputs for now
     std::random_device rd; 
     std::mt19937 gen(rd());
     std::vector<float> values(NumberCount); 
