@@ -2,9 +2,9 @@
 #include <math.h>
 #include <algorithm>
 #include <iostream>
+#include "timing.h"
 
 std::vector<float> read_inputs(int NumberCount,int minimum, int maximum) {
-    // use random inputs for now
     std::random_device rd; 
     std::mt19937 gen(rd());
     std::vector<float> values(NumberCount); 
@@ -32,22 +32,34 @@ void getUsedSet(std::vector<int> &usedSet, std::vector<int> &indices, std::vecto
 }
 
 int main(int argc, char* argv[]) {
-    int NumberCount = 10;
-    int minimum = 0, maximum = 10;
+    int NumberCount = 40000;
+    int minimum = 0, maximum = 1000;
     float a = 0.2, b = 0.2;
     int topN = a * NumberCount, randN = b * NumberCount;
     // Assume regression
     std::vector<float> predictions = read_inputs(NumberCount, minimum, maximum);
     std::vector<float> train = read_inputs(NumberCount, minimum, maximum);
+
+    Timer timer1;
     std::vector<float> gradients(NumberCount);
     compute_L2_gradients(predictions, train, gradients);
+    double t1 = timer1.elapsed();
+    
+    Timer timer2;
     std::vector<int> indices(NumberCount);
     iota(indices.begin(), indices.end(), 0);
     std::stable_sort(indices.begin(), indices.end(), [&gradients](size_t i1, size_t i2) {return gradients[i1] > gradients[i2];});
+    double t2 = timer2.elapsed();
+
+    Timer timer3;
     std::vector<int> randSet;
     std::vector<int> usedSet(topN + randN);
     std::sample(indices.begin() + topN, indices.end(), std::back_inserter(randSet), randN, std::mt19937{std::random_device{}()});
+    double t3 = timer3.elapsed();
+
+    Timer timer4;
     getUsedSet(usedSet, indices, randSet, topN, randN);
+    double t4 = timer4.elapsed();
     /* for (int i = 0; i < NumberCount; i++) {
         std::cout << i << " " << gradients[i] << " " << indices[i] << '\n';
     }
@@ -55,4 +67,9 @@ int main(int argc, char* argv[]) {
         std::cout << x << ' ';
     }
     std::cout << "\n"; */
+    std::cout << "Total time: " << t1 + t2 + t4 + t4 << std::endl;
+    std::cout << "Compute gradients: " << t1 << std::endl;
+    std::cout << "Sort inputs by gradients: " << t2 << std::endl;
+    std::cout << "Sampling: " << t3 << std::endl;
+    std::cout << "Get the dataset used for the next iteration: " << t4 << std::endl;
 }
