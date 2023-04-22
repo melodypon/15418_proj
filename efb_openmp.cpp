@@ -2,24 +2,48 @@
 #include <algorithm>
 #include <iostream>
 #include <fstream>
+#include <numeric>
 #include "timing.h"
 
 void read_features(std::vector<std::vector<float> > &features) {
 	// LETOR 4.0 Datasets
-	for (int i = 0; i < 46; i++) {
+	// for (int i = 0; i < 46; i++) {
+	// 	features.push_back(std::vector<float>());
+	// }
+	// std::string line;
+	// std::ifstream infile("Querylevelnorm.txt");
+
+	// while(getline(infile, line)) {
+	// 	std::size_t found = 0;
+	// 	int i = 0;
+	// 	while (found != std::string::npos) {
+	// 		found = line.find(":", found + 1);
+	// 		features[i].push_back(std::stof(line.substr(found + 1, found + 9)));
+	//         i++;
+	//     }
+    // }
+    // std::cout << features.size() << std::endl;
+    // std::cout << features[0].size() << std::endl;
+
+	// Flight delay
+	for (int i = 0; i < 617; i++) {
 		features.push_back(std::vector<float>());
 	}
 	std::string line;
-	std::ifstream infile("Querylevelnorm.txt");
+	std::ifstream infile("part-00000-e36056e8-fe85-4a72-b3ec-9e9d5deb5cf8-c000.csv");
 
-	while(getline(infile, line)) {
+	int count = 0;
+	while(count < 20000) {
+		getline(infile, line);
 		std::size_t found = 0;
 		int i = 0;
+		features[i].push_back(std::stof(line.substr(found, found + 3)));
 		while (found != std::string::npos) {
-			found = line.find(":", found + 1);
-			features[i].push_back(std::stof(line.substr(found + 1, found + 9)));
+			found = line.find(",", found + 1);
+			features[i].push_back(std::stof(line.substr(found + 1, found + 4)));
 	        i++;
 	    }
+		count++;
     }
     std::cout << features.size() << std::endl;
     std::cout << features[0].size() << std::endl;
@@ -169,13 +193,20 @@ int main(int argc, char* argv[]) {
 
 	// Greedy Bundle
 	Timer timer1;
-	std::vector<std::vector<int> > graph(num_features, std::vector<int>(num_features));
-	build_graph(graph, features);
+	// std::vector<std::vector<int> > graph(num_features, std::vector<int>(num_features));
+	// build_graph(graph, features);
+	std::vector<int> non_zeros(num_features);
+	#pragma omp parallel for schedule(dynamic)
+    for (int i = 0; i < num_features; i++) {
+        non_zeros[i] = count_non_zero(features[i]);
+    }
 	double t1 = timer1.elapsed();
 
 	Timer timer2;
-	std::vector<int> order;
-	sort_order(graph, order);
+	std::vector<int> order(num_features);
+	// sort_order(graph, order);
+	iota(order.begin(), order.end(), 0);
+    std::sort(order.begin(), order.end(), [&non_zeros](size_t i1, size_t i2) {return non_zeros[i1] > non_zeros[i2];});
 	double t2 = timer2.elapsed();
 
 	Timer timer3;

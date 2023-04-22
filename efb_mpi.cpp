@@ -1,9 +1,10 @@
+#include "mpi.h"
+#include "timing.h"
 #include <vector>
 #include <algorithm>
 #include <iostream>
 #include <fstream>
 #include <numeric>
-#include "timing.h"
 
 void read_features(std::vector<std::vector<float> > &features) {
 	// Simple test case
@@ -186,61 +187,143 @@ void merge_features(std::vector<std::vector<float> > &features, std::vector<std:
 }
 
 int main(int argc, char* argv[]) {
+    int pid;
+    int nproc;
+    // Initialize MPI
+    MPI_Init(&argc, &argv);
+    // Get process rank
+    MPI_Comm_rank(MPI_COMM_WORLD, &pid);
+    // Get total number of processes specificed at start of run
+    MPI_Comm_size(MPI_COMM_WORLD, &nproc);
+
 	int max_conflict = 10000;
+
+    // Read features
 	std::vector<std::vector<float> > features;
-	read_features(features);
-	int num_features = features.size();
+    int num_features;
+    int num_data;
+    if (pid == 0) {
+        read_features(features);
+        num_features = features.size();
+        num_data = features[0].size();
+    }
+    MPI_Bcast(&num_features, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&num_data, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+    if (pid != 0) {
+        for (int i = 0; i < num_features; i++) {
+            features.push_back(std::vector<float>(num_data));
+        }
+    }
+
+    // Calculation for MPI
+    int recvcounts[nproc];
+    int displs[nproc];
+    int itemPerNode = num_data / nproc;
+    for (int i = 0; i < nproc; i++) {
+      displs[i] = i * itemPerNode;
+      recvcounts[i] = itemPerNode;
+    }
+    recvcounts[nproc-1] = num_data - (nproc-1) * itemPerNode;
+
+    std::vector<std::vector<float> > priv_features;
+    for (int i = 0; i < num_features; i++) {
+        std::vector<float> feature(recvcounts[pid]);
+        MPI_Scatterv(static_cast<void*>(features[i].data()), recvcounts, displs,
+                     MPI_FLOAT, static_cast<void*>(feature.data()), recvcounts[pid],
+                     MPI_FLOAT, 0, MPI_COMM_WORLD);
+        priv_features.push_back(feature);
+    }
 
 	// Greedy Bundle
 	Timer timer1;
-	// std::vector<std::vector<int> > graph(num_features, std::vector<int>(num_features));
-	// build_graph(graph, features);
-	std::vector<int> non_zeros(num_features);
+    std::vector<int> non_zeros(num_features);
     for (int i = 0; i < num_features; i++) {
-        non_zeros[i] = count_non_zero(features[i]);
+        non_zeros[i] = count_non_zero(priv_features[i]);
+    }
+    std::vector<int> all_count(num_features * nproc);
+    MPI_Gather(static_cast<void*>(non_zeros.data()), num_features, MPI_INT,
+               static_cast<void*>(all_count.data()), num_features, MPI_INT,
+               0, MPI_COMM_WORLD);
+    if (pid == 0) {
+        for (int i = 0; i < num_features; i++) {
+            for (int j = 1; j < nproc; j++) {
+                non_zeros[i] += all_count[j * num_features + i];
+            }
+        }
     }
 	double t1 = timer1.elapsed();
 
-	Timer timer2;
-	std::vector<int> order(num_features);
-	// sort_order(graph, order);
-    iota(order.begin(), order.end(), 0);
-    std::sort(order.begin(), order.end(), [&non_zeros](size_t i1, size_t i2) {return non_zeros[i1] > non_zeros[i2];});
-	double t2 = timer2.elapsed();
+    Timer timer2;
+    std::vector<int> order(num_features);
+    if (pid == 0) {
+        iota(order.begin(), order.end(), 0);
+        std::sort(order.begin(), order.end(), [&non_zeros](size_t i1, size_t i2) {return non_zeros[i1] > non_zeros[i2];});
+    }
+    double t2 = timer2.elapsed();
 
-	Timer timer3;
-	std::vector<std::vector<int> > bundles;
-	bundle_features(order, max_conflict, features, bundles);
-	double t3 = timer3.elapsed();
+    Timer timer3;
+    int num_bundles;
+    std::vector<std::vector<int> > bundles;
+    if (pid == 0) {
+        bundle_features(order, max_conflict, features, bundles);
+        num_bundles = bundles.size();
+    }
+    double t3 = timer3.elapsed();
 
-	// for (auto i: bundles) {
-	// 	std::cout << "bundle: ";
-	// 	for (auto j: i) {
-	// 		std::cout << j << " ";
-	// 	}
-	// 	std::cout << std::endl;
-	// }
+    MPI_Bcast(&num_bundles, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    std::vector<int> bundle_size(num_bundles);
+    std::vector<int> all_bundle(num_features);
+    if (pid == 0) {
+        int count = 0;
+        for (int i = 0; i < num_bundles; i++) {
+            bundle_size[i] = bundles[i].size();
+            for (int j = 0; j < bundle_size[i]; j++) {
+                all_bundle[count] = bundles[i][j];
+                count++;
+            }
+        }
+    }
+    MPI_Bcast(bundle_size.data(), num_bundles, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(all_bundle.data(), num_features, MPI_INT, 0, MPI_COMM_WORLD);
+    if (pid != 0) {
+        int count = 0;
+        for (int i = 0; i < num_bundles; i++) {
+            std::vector<int> bundle;
+            for (int j = 0; j < bundle_size[i]; j++) {
+                bundle.push_back(all_bundle[count]);
+                count++;
+            }
+            bundles.push_back(bundle);
+        }
+    }
 
-	// Merge Exclusive Features
-	Timer timer4;
-	std::vector<std::vector<float> > new_features;
-	merge_features(features, bundles, new_features);
+    // Merge Exclusive Features
+    Timer timer4;
+	std::vector<std::vector<float> > priv_new_features;
+	merge_features(priv_features, bundles, priv_new_features);
+
+    std::vector<std::vector<float> > new_features;
+    for (int i = 0; i < num_bundles; i++) {
+        new_features.push_back(std::vector<float>(num_data));
+    }
+    for (int i = 0; i < num_bundles; i++) {
+        MPI_Gatherv(static_cast<void*>(new_features[i].data()), recvcounts[pid], MPI_FLOAT,
+                    static_cast<void*>(new_features[i].data()), recvcounts, displs,
+                    MPI_FLOAT, 0, MPI_COMM_WORLD);
+    }
 	double t4 = timer4.elapsed();
 
-	std::cout << new_features.size() << std::endl;
-	std::cout << new_features[0].size() << std::endl;
+    if (pid == 0) {
+        std::cout << new_features.size() << std::endl;
+        std::cout << new_features[0].size() << std::endl;
 
-	printf("TOTAL TIME : %.6fs\n", t1 + t2 + t3 + t4);
-	printf("Build graph: %.6fs\n", t1);
-	printf("Sort order : %.6fs\n", t2);
-	printf("Bundle feat: %.6fs\n", t3);
-	printf("Merge feat : %.6fs\n", t4);
+        printf("TOTAL TIME : %.6fs\n", t1 + t2 + t3 + t4);
+        printf("Build graph: %.6fs\n", t1);
+        printf("Sort order : %.6fs\n", t2);
+        printf("Bundle feat: %.6fs\n", t3);
+        printf("Merge feat : %.6fs\n", t4);
+    }
 
-	// for (auto i: new_features) {
-	// 	std::cout << "feature: ";
-	// 	for (auto j: i) {
-	// 		std::cout << j << " ";
-	// 	}
-	// 	std::cout << std::endl;
-	// }
+    MPI_Finalize();
 }
