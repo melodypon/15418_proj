@@ -32,7 +32,7 @@ void getUsedSet(std::vector<int> &usedSet, std::vector<int> &indices, std::vecto
 }
 
 int main(int argc, char* argv[]) {
-    int NumberCount = 40000;
+    int NumberCount = 400000;
     int minimum = 0, maximum = 1000;
     float a = 0.2, b = 0.2;
     int topN = a * NumberCount, randN = b * NumberCount;
@@ -67,9 +67,10 @@ int main(int argc, char* argv[]) {
         std::cout << x << ' ';
     }
     std::cout << "\n"; */
-    std::cout << "Total time: " << t1 + t2 + t4 + t4 << std::endl;
-    std::cout << "Compute gradients: " << t1 << std::endl;
-    std::cout << "Sort inputs by gradients: " << t2 << std::endl;
-    std::cout << "Sampling: " << t3 << std::endl;
-    std::cout << "Get the dataset used for the next iteration: " << t4 << std::endl;
+
+    printf("TOTAL TIME  : %.6fs\n", t1 + t2 + t3 + t4);
+    printf("Compute grad: %.6fs\n", t1);
+    printf("Sort by grad: %.6fs\n", t2);
+    printf("Sampling    : %.6fs\n", t3);
+    printf("New dataset : %.6fs\n", t4);
 }

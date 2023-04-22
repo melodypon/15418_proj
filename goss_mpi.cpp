@@ -1,4 +1,5 @@
 #include "mpi.h"
+#include "timing.h"
 #include <random>
 #include <math.h>
 #include <algorithm>
@@ -42,8 +43,8 @@ int main(int argc, char* argv[]) {
     // Get total number of processes specificed at start of run
     MPI_Comm_size(MPI_COMM_WORLD, &nproc);
 
-    int NumberCount = 40000;
-    int minimum = 0, maximum = 10;
+    int NumberCount = 400000;
+    int minimum = 0, maximum = 1000;
     float a = 0.2, b = 0.2;
     int topN = a * NumberCount, randN = b * NumberCount;
 
@@ -70,6 +71,7 @@ int main(int argc, char* argv[]) {
     std::vector<float> private_train(recvcounts[pid]);
     std::vector<float> private_grad(recvcounts[pid]);
 
+    Timer timer1;
     MPI_Scatterv(static_cast<void*>(predictions.data()), recvcounts, displs,
                  MPI_FLOAT, static_cast<void*>(private_pred.data()), recvcounts[pid],
                  MPI_FLOAT, 0, MPI_COMM_WORLD);
@@ -84,13 +86,29 @@ int main(int argc, char* argv[]) {
                 MPI_FLOAT, 0, MPI_COMM_WORLD);
 
     if (pid == 0) {
+        double t1 = timer1.elapsed();
+
+        Timer timer2;
         std::vector<int> indices(NumberCount);
         iota(indices.begin(), indices.end(), 0);
         std::stable_sort(indices.begin(), indices.end(), [&gradients](size_t i1, size_t i2) {return gradients[i1] > gradients[i2];});
+        double t2 = timer2.elapsed();
+        
+        Timer timer3;
         std::vector<int> randSet;
         std::vector<int> usedSet(topN + randN);
         std::sample(indices.begin() + topN, indices.end(), std::back_inserter(randSet), randN, std::mt19937{std::random_device{}()});
+        double t3 = timer3.elapsed();
+        
+        Timer timer4;
         getUsedSet(usedSet, indices, randSet, topN, randN);
+        double t4 = timer4.elapsed();
+
+        printf("TOTAL TIME  : %.6fs\n", t1 + t2 + t3 + t4);
+        printf("Compute grad: %.6fs\n", t1);
+        printf("Sort by grad: %.6fs\n", t2);
+        printf("Sampling    : %.6fs\n", t3);
+        printf("New dataset : %.6fs\n", t4);
     }
 
     MPI_Finalize();
