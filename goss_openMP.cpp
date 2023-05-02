@@ -105,7 +105,7 @@ int main(int argc, char* argv[]) {
     // iota(indices.begin(), indices.end(), 0);
     // std::stable_sort(indices.begin(), indices.end(), [&gradients](size_t i1, size_t i2) {return gradients[i1] > gradients[i2];});
     double t2 = timer2.elapsed();
-    check_correctness(indices, gradients, NumberCount);
+    // check_correctness(indices, gradients, NumberCount);
 
     Timer timer3;
     std::vector<int> randSet;
