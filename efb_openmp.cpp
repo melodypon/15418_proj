@@ -63,14 +63,16 @@ int count_conflict(std::vector<float> &f1, std::vector<float> &f2) {
 	return conflict;
 }
 
-int count_non_zero(std::vector<float> &f1) {
+int count_non_zero(std::vector<float> &f1, int &conflict, float &max) {
 	int size = f1.size();
-	int conflict = 0;
+	conflict = 0;
+	max = 0.0f;
 
-    #pragma omp parallel for reduction(+:conflict)
+    #pragma omp parallel for reduction(+:conflict) reduction(max:max)
 	for (int i = 0; i < size; i++) {
 		if (f1[i] != 0.0f) {
 			conflict++;
+			max = (f1[i] > max) ? f1[i] : max;
 		}
 	}
 	return conflict;
@@ -149,20 +151,21 @@ void bundle_features(std::vector<int> &order, int max_conflict, std::vector<std:
 float num_of_bin(std::vector<float> &feature) {
 	float max = 0.0f;
 
+	#pragma omp parallel for reduction(max: max)
 	for (auto i: feature) {
 		max = (i > max) ? i : max;
 	}
 	return max;
 }
 
-void merge_features(std::vector<std::vector<float> > &features, std::vector<std::vector<int> > &bundles, std::vector<std::vector<float> > &new_features) {
+void merge_features(std::vector<std::vector<float> > &features, std::vector<std::vector<int> > &bundles, std::vector<std::vector<float> > &new_features, std::vector<float> &maxs) {
 	int num_data = features[0].size();
 	
 	for (auto F: bundles) {
 		std::vector<float> bin_range = {0};
 		float total_bin = 0;
 		for (auto f: F) {
-			total_bin += num_of_bin(features[f]);
+			total_bin += maxs[f];
 			bin_range.push_back(total_bin);
 		}
 
@@ -194,9 +197,10 @@ int main(int argc, char* argv[]) {
 	// std::vector<std::vector<int> > graph(num_features, std::vector<int>(num_features));
 	// build_graph(graph, features);
 	std::vector<int> non_zeros(num_features);
+	std::vector<float> maxs(num_features);
 	#pragma omp parallel for schedule(dynamic)
     for (int i = 0; i < num_features; i++) {
-        non_zeros[i] = count_non_zero(features[i]);
+        count_non_zero(features[i], non_zeros[i], maxs[i]);
     }
 	double t1 = timer1.elapsed();
 
@@ -215,7 +219,7 @@ int main(int argc, char* argv[]) {
 	// Merge Exclusive Features
 	Timer timer4;
 	std::vector<std::vector<float> > new_features;
-	merge_features(features, bundles, new_features);
+	merge_features(features, bundles, new_features, maxs);
 	double t4 = timer4.elapsed();
 
 	std::cout << new_features.size() << std::endl;

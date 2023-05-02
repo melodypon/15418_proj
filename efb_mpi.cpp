@@ -42,11 +42,12 @@ void read_features(std::vector<std::vector<float> > &features) {
 	std::ifstream infile("part-00000-e36056e8-fe85-4a72-b3ec-9e9d5deb5cf8-c000.csv");
 
 	int count = 0;
-	while(count < 20000) {
+	while(count < 100000) {
 		getline(infile, line);
 		std::size_t found = 0;
 		int i = 0;
 		features[i].push_back(std::stof(line.substr(found, found + 3)));
+		i++;
 		while (found != std::string::npos) {
 			found = line.find(",", found + 1);
 			features[i].push_back(std::stof(line.substr(found + 1, found + 4)));
@@ -123,17 +124,15 @@ int union_conflicts(std::vector<float> &conflicts, std::vector<float> &features)
 	return count;
 }
 
-void bundle_features(std::vector<int> &order, int max_conflict, std::vector<std::vector<float> > &features, std::vector<std::vector<int> > &bundles) {
+void bundle_features(std::vector<int> &order, int max_conflict, std::vector<std::vector<float> > &features, std::vector<std::vector<int> > &bundles, std::vector<int> &non_zeros) {
 	int num_features = order.size();
-	std::vector<std::vector<float> > bundle_conflicts;
 	std::vector<int> bundle_conflict_counts;
 	for (int i = 0; i < num_features; i++) {
 		bool need_new = true;
 		for (int j = 0; j < bundles.size(); j++) {
-			int count = count_conflict(features[i], bundle_conflicts[j]);
-			if (count <= max_conflict) {
+			if (bundle_conflict_counts[j] + non_zeros[i] <= max_conflict) {
 				bundles[j].push_back(i);
-				bundle_conflict_counts[j] = union_conflicts(bundle_conflicts[j], features[i]);
+				bundle_conflict_counts[j] += non_zeros[i];
 				need_new = false;
 				break;
 			}
@@ -142,9 +141,7 @@ void bundle_features(std::vector<int> &order, int max_conflict, std::vector<std:
 			std::vector<int> new_bundle;
 			new_bundle.push_back(i);
 			bundles.push_back(new_bundle);
-			std::vector<float> conflicts(features[i]);
-			bundle_conflicts.push_back(conflicts);
-			bundle_conflict_counts.push_back(count_non_zero(features[i]));
+			bundle_conflict_counts.push_back(non_zeros[i]);
 		}
 	}
 	// for (auto i: bundle_conflict_counts) {
@@ -266,7 +263,7 @@ int main(int argc, char* argv[]) {
     int num_bundles;
     std::vector<std::vector<int> > bundles;
     if (pid == 0) {
-        bundle_features(order, max_conflict, features, bundles);
+        bundle_features(order, max_conflict, features, bundles, non_zeros);
         num_bundles = bundles.size();
     }
     double t3 = timer3.elapsed();
@@ -302,17 +299,18 @@ int main(int argc, char* argv[]) {
     Timer timer4;
 	std::vector<std::vector<float> > priv_new_features;
 	merge_features(priv_features, bundles, priv_new_features);
+	double t4 = timer4.elapsed();
 
     std::vector<std::vector<float> > new_features;
     for (int i = 0; i < num_bundles; i++) {
         new_features.push_back(std::vector<float>(num_data));
     }
     for (int i = 0; i < num_bundles; i++) {
-        MPI_Gatherv(static_cast<void*>(new_features[i].data()), recvcounts[pid], MPI_FLOAT,
+        MPI_Gatherv(static_cast<void*>(priv_new_features[i].data()), recvcounts[pid], MPI_FLOAT,
                     static_cast<void*>(new_features[i].data()), recvcounts, displs,
                     MPI_FLOAT, 0, MPI_COMM_WORLD);
     }
-	double t4 = timer4.elapsed();
+	// double t4 = timer4.elapsed();
 
     if (pid == 0) {
         std::cout << new_features.size() << std::endl;
