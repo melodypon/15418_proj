@@ -88,9 +88,12 @@ int main(int argc, char* argv[]) {
     double t1 = timer1.elapsed();
     
     Timer timer2;
-    int numPartition = 100;
+    int numPartition = 5;
     int dataPerPartition = NumberCount / numPartition;
     std::vector<int> splittingPoints(numPartition + 1);
+    for (int i = 0; i < numPartition; i++) {
+        splittingPoints[i] = i * dataPerPartition;
+    }
     splittingPoints[numPartition] = NumberCount;
     std::vector<int> indices(NumberCount);
     #pragma omp parallel for schedule(static) 
@@ -102,6 +105,7 @@ int main(int argc, char* argv[]) {
     // iota(indices.begin(), indices.end(), 0);
     // std::stable_sort(indices.begin(), indices.end(), [&gradients](size_t i1, size_t i2) {return gradients[i1] > gradients[i2];});
     double t2 = timer2.elapsed();
+    check_correctness(indices, gradients, NumberCount);
 
     Timer timer3;
     std::vector<int> randSet;
