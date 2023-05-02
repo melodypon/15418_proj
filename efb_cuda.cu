@@ -10,7 +10,7 @@
 
 #define THREADS 512
 
-__global__ void count_non_zero(float *features, int num_data, int *count, float *maxs) {
+__global__ void count_non_zero(float *features, int num_data, int *count, float *maxs, int *tmp_count, float *tmp_maxs) {
     int start = blockIdx.x * num_data;
     int index = threadIdx.x;
     int dataPerThread = num_data / THREADS;
@@ -26,9 +26,28 @@ __global__ void count_non_zero(float *features, int num_data, int *count, float 
 		}
     }
 
-    count[blockIdx.x] += conflicts;
-    if (max_value > maxs[blockIdx.x]){
-        maxs[blockIdx.x] = max_value;
+    // count[blockIdx.x] += conflicts;
+    // if (max_value > maxs[blockIdx.x]){
+    //     maxs[blockIdx.x] = max_value;
+    // }
+
+    tmp_count[blockIdx.x * THREADS + index] = conflicts;
+    tmp_maxs[blockIdx.x * THREADS + index] = max_value;
+
+    __syncthreads();
+
+    for (int i = 1; i <= 9; i++) {
+        int two = 1 << i;
+        if (index % two == 0) {
+            tmp_count[blockIdx.x * THREADS + index] += tmp_count[blockIdx.x * THREADS + index + (two >> 1)];
+            tmp_maxs[blockIdx.x * THREADS + index] = max(tmp_maxs[blockIdx.x * THREADS + index], tmp_maxs[blockIdx.x * THREADS + index + (two >> 1)]);
+        }
+        __syncthreads();
+    }
+
+    if (index == 0) {
+        count[blockIdx.x] = tmp_count[blockIdx.x * THREADS + index];
+        maxs[blockIdx.x] = tmp_maxs[blockIdx.x * THREADS + index];
     }
 }
 
@@ -81,15 +100,17 @@ void efbCuda(std::vector<std::vector<float> > features, int max_conflict) {
     int* count = (int*)calloc(num_features, sizeof(int));
     float* maxs = (float*)calloc(num_features, sizeof(float));
     float* device_features;
-    int* device_count;
-    float* device_maxs;
+    int* device_count, *device_tmp_count;
+    float* device_maxs, *device_tmp_maxs;
     cudaMalloc(&device_features, sizeof(float) * num_features * num_data);
     cudaMalloc(&device_count, sizeof(int) * num_features);
+    cudaMalloc(&device_tmp_count, sizeof(int) * num_features * THREADS);
     cudaMalloc(&device_maxs, sizeof(float) * num_features);
+    cudaMalloc(&device_tmp_maxs, sizeof(float) * num_features * THREADS);
     cudaMemcpy(device_features, features.data(), sizeof(float) * num_features * num_data, cudaMemcpyHostToDevice);
 
     Timer timer1;
-    count_non_zero<<<num_features, THREADS>>>(device_features, num_data, device_count, device_maxs);
+    count_non_zero<<<num_features, THREADS>>>(device_features, num_data, device_count, device_maxs, device_tmp_count, device_tmp_maxs);
     cudaThreadSynchronize();
     double t1 = timer1.elapsed();
 

@@ -16,11 +16,12 @@ void read_features(std::vector<std::vector<float> > &features) {
 	std::ifstream infile("part-00000-e36056e8-fe85-4a72-b3ec-9e9d5deb5cf8-c000.csv");
 
 	int count = 0;
-	while(count < 20000) {
+	while(count < 30000) {
 		getline(infile, line);
 		std::size_t found = 0;
 		int i = 0;
 		features[i].push_back(std::stof(line.substr(found, found + 3)));
+		i++;
 		while (found != std::string::npos) {
 			found = line.find(",", found + 1);
 			features[i].push_back(std::stof(line.substr(found + 1, found + 4)));
