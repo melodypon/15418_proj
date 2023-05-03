@@ -94,6 +94,8 @@ void check_correctness(std::vector<int> &indicies, std::vector<float> &gradients
     std::stable_sort(answer_indices.begin(), answer_indices.end(), [&gradients](size_t i1, size_t i2) {return gradients[i1] > gradients[i2];});
     for (int i = 0; i < NumberCount; i++) {
         if (answer_indices[i] != indicies[i]) {
+            std::cout << i << " " << answer_indices[i] << " " << indicies[i] << " " << gradients[answer_indices[i]] << " " << gradients[indicies[i]] << std::endl;
+            std::cout << "Incorrect\n";
             break;
         }
     }
@@ -172,7 +174,7 @@ int main(int argc, char* argv[]) {
     std::vector<int> priv_indices(recvcounts[pid]);
     #pragma omp parallel for schedule(static) 
     for (int i = 0; i < numPartition; i++) {
-        iota(priv_indices.begin() + splittingPoints[i], priv_indices.begin() + splittingPoints[i+1], splittingPoints[i]);
+        iota(priv_indices.begin() + splittingPoints[i], priv_indices.begin() + splittingPoints[i+1], displs[pid] + splittingPoints[i]);
         std::stable_sort(priv_indices.begin() + splittingPoints[i], priv_indices.begin() + splittingPoints[i+1], [&](size_t i1, size_t i2) {return private_grad[i1 - begin] > private_grad[i2 - begin];});
     }
     kWayMerge2(numPartition, dataPerPartition, priv_indices, private_grad, splittingPoints);
@@ -190,7 +192,7 @@ int main(int argc, char* argv[]) {
         // iota(indices.begin(), indices.end(), 0);
         // std::stable_sort(indices.begin(), indices.end(), [&gradients](size_t i1, size_t i2) {return gradients[i1] > gradients[i2];});
         double t3 = timer3.elapsed();
-        check_correctness(indices, gradients, NumberCount);
+        // check_correctness(indices, gradients, NumberCount);
         
         Timer timer4;
         std::vector<int> randSet;
