@@ -109,7 +109,7 @@ int main(int argc, char* argv[]) {
     // Get total number of processes specificed at start of run
     MPI_Comm_size(MPI_COMM_WORLD, &nproc);
 
-    int NumberCount = 100000;
+    int NumberCount = 61700000;
     int minimum = 0, maximum = 1000000;
     float a = 0.2, b = 0.2;
     int topN = a * NumberCount, randN = b * NumberCount;
