@@ -111,7 +111,8 @@ int main(int argc, char* argv[]) {
     // Get total number of processes specificed at start of run
     MPI_Comm_size(MPI_COMM_WORLD, &nproc);
 
-    int NumberCount = 61700000;
+    // 61700000
+    int NumberCount = 10000000;
     int minimum = 0, maximum = 1000000;
     float a = 0.2, b = 0.2;
     int topN = a * NumberCount, randN = b * NumberCount;
@@ -121,6 +122,7 @@ int main(int argc, char* argv[]) {
     std::vector<float> train(NumberCount);
 
     if (pid == 0) {
+        std::cerr << "nproc: " << nproc << std::endl;
         predictions = read_inputs(NumberCount, minimum, maximum);
         train = read_inputs(NumberCount, minimum, maximum);
     }
@@ -142,19 +144,23 @@ int main(int argc, char* argv[]) {
     double t6 = timer6.elapsed();
 
     Timer timer1;
+    Timer timer8;
     MPI_Scatterv(static_cast<void*>(predictions.data()), recvcounts, displs,
                  MPI_FLOAT, static_cast<void*>(private_pred.data()), recvcounts[pid],
                  MPI_FLOAT, 0, MPI_COMM_WORLD);
     MPI_Scatterv(static_cast<void*>(train.data()), recvcounts, displs,
                  MPI_FLOAT, static_cast<void*>(private_train.data()), recvcounts[pid],
                  MPI_FLOAT, 0, MPI_COMM_WORLD);
-    
+    double t8 = timer8.elapsed();
+    std::cerr << "reached1\n";
     compute_L2_gradients(private_pred, private_train, private_grad);
-
+    Timer timer9;
     MPI_Gatherv(static_cast<void*>(private_grad.data()), recvcounts[pid], MPI_FLOAT,
                 static_cast<void*>(gradients.data()), recvcounts, displs,
                 MPI_FLOAT, 0, MPI_COMM_WORLD);
+    double t9 = timer9.elapsed();
     double t1 = timer1.elapsed();
+    std::cerr << "reached2\n";
     
     Timer timer2;
     std::vector<int> indices(NumberCount);
@@ -163,7 +169,7 @@ int main(int argc, char* argv[]) {
     int begin = displs[pid];
     std::stable_sort(priv_indices.begin(), priv_indices.end(), [&](size_t i1, size_t i2) {return private_grad[i1 - begin] > private_grad[i2 - begin];}); */
 
-    int numPartition = 5;
+    int numPartition = 20;
     int dataPerPartition = recvcounts[pid] / numPartition;
     int begin = displs[pid];
     std::vector<int> splittingPoints(numPartition + 1);
@@ -172,28 +178,31 @@ int main(int argc, char* argv[]) {
     }
     splittingPoints[numPartition] = recvcounts[pid];
     std::vector<int> priv_indices(recvcounts[pid]);
+    std::cerr << "reached3\n";
     #pragma omp parallel for schedule(static) 
     for (int i = 0; i < numPartition; i++) {
         iota(priv_indices.begin() + splittingPoints[i], priv_indices.begin() + splittingPoints[i+1], displs[pid] + splittingPoints[i]);
         std::stable_sort(priv_indices.begin() + splittingPoints[i], priv_indices.begin() + splittingPoints[i+1], [&](size_t i1, size_t i2) {return private_grad[i1 - begin] > private_grad[i2 - begin];});
     }
+    std::cerr << "reached4\n";
     kWayMerge2(numPartition, dataPerPartition, priv_indices, private_grad, splittingPoints);
     double t2 = timer2.elapsed();
     Timer timer7;
+    std::cerr << "reached5\n";
     MPI_Gatherv(static_cast<void*>(priv_indices.data()), recvcounts[pid], MPI_INT,
                 static_cast<void*>(indices.data()), recvcounts, displs,
                 MPI_INT, 0, MPI_COMM_WORLD);
     double t7 = timer7.elapsed();
-
+    std::cerr << "reached6\n";
     if (pid == 0) {
-
+        std::cerr << "reached7\n";
         Timer timer3;
         kWayMerge(nproc, itemPerNode, indices, gradients, displs, recvcounts);
         // iota(indices.begin(), indices.end(), 0);
         // std::stable_sort(indices.begin(), indices.end(), [&gradients](size_t i1, size_t i2) {return gradients[i1] > gradients[i2];});
         double t3 = timer3.elapsed();
         // check_correctness(indices, gradients, NumberCount);
-        
+        std::cerr << "reached8\n";
         Timer timer4;
         std::vector<int> randSet;
         std::vector<int> usedSet(topN + randN);
@@ -212,6 +221,7 @@ int main(int argc, char* argv[]) {
         printf("Sampling    : %.6fs\n", t4);
         printf("New dataset : %.6fs\n", t5);
         printf("Other computation : %.6fs\n", t6);
+        printf("Communication : %.6fs\n", t7 + t8 + t9);
     }
 
     MPI_Finalize();
