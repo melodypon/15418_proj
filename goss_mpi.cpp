@@ -169,7 +169,7 @@ int main(int argc, char* argv[]) {
     int begin = displs[pid];
     std::stable_sort(priv_indices.begin(), priv_indices.end(), [&](size_t i1, size_t i2) {return private_grad[i1 - begin] > private_grad[i2 - begin];}); */
 
-    int numPartition = 20;
+    int numPartition = 5;
     int dataPerPartition = recvcounts[pid] / numPartition;
     int begin = displs[pid];
     std::vector<int> splittingPoints(numPartition + 1);
