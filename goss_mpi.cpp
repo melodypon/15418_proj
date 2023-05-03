@@ -61,7 +61,7 @@ void kWayMerge(int k, int dataPerPartition, std::vector<int> &indicies, std::vec
     indicies = result;
 }
 
-void kWayMerge2(int k, int dataPerPartition, std::vector<int> &indicies, std::vector<float> &gradients, std::vector<int> &splittingPoints) {
+void kWayMerge2(int k, int dataPerPartition, std::vector<int> &indicies, std::vector<float> &gradients, std::vector<int> &splittingPoints, int begin) {
     std::vector<int> result(indicies.size());
     int curr_idx = 0;
     auto cmp = [](std::pair<float, int> left, std::pair<float, int> right) { return left.first < right.first; };
@@ -70,18 +70,18 @@ void kWayMerge2(int k, int dataPerPartition, std::vector<int> &indicies, std::ve
     for (int i = 0; i < k; i++) {
         curr_indices[i] = splittingPoints[i] + 1;
         int index = indicies[splittingPoints[i]];
-        min_heap.push(std::make_pair(gradients[index], index));
+        min_heap.push(std::make_pair(gradients[index - begin], index));
     }
     while (!min_heap.empty()) {
         std::pair<float, int> top = min_heap.top();
         min_heap.pop();
         result[curr_idx] = top.second;
         curr_idx++;
-        int partitionIndex = top.second / dataPerPartition;
+        int partitionIndex = (top.second - begin) / dataPerPartition;
         partitionIndex = partitionIndex == k + 1 ? k : partitionIndex;
         if (curr_indices[partitionIndex] < splittingPoints[partitionIndex + 1]) {
             int index = indicies[curr_indices[partitionIndex]];
-            min_heap.push(std::make_pair(gradients[index], index));
+            min_heap.push(std::make_pair(gradients[index - begin], index));
             curr_indices[partitionIndex]++;
         }
     }
@@ -185,7 +185,7 @@ int main(int argc, char* argv[]) {
         std::stable_sort(priv_indices.begin() + splittingPoints[i], priv_indices.begin() + splittingPoints[i+1], [&](size_t i1, size_t i2) {return private_grad[i1 - begin] > private_grad[i2 - begin];});
     }
     std::cerr << "reached4\n";
-    kWayMerge2(numPartition, dataPerPartition, priv_indices, private_grad, splittingPoints);
+    kWayMerge2(numPartition, dataPerPartition, priv_indices, private_grad, splittingPoints, begin);
     double t2 = timer2.elapsed();
     Timer timer7;
     std::cerr << "reached5\n";
