@@ -16,8 +16,8 @@ std::vector<float> read_inputs(int NumberCount,int minimum, int maximum) {
 }
 
 int main(int argc, char* argv[]) {
-    int NumberCount = 400000;
-    int minimum = 0, maximum = 1000;
+    int NumberCount = 10000000;
+    int minimum = 0, maximum = 1000000;
     float a = 0.2, b = 0.2;
     int topN = a * NumberCount, randN = b * NumberCount;
 

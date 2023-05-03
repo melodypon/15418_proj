@@ -32,8 +32,8 @@ void getUsedSet(std::vector<int> &usedSet, std::vector<int> &indices, std::vecto
 }
 
 int main(int argc, char* argv[]) {
-    int NumberCount = 400000;
-    int minimum = 0, maximum = 1000;
+    int NumberCount = 100000;
+    int minimum = 0, maximum = 1000000;
     float a = 0.2, b = 0.2;
     int topN = a * NumberCount, randN = b * NumberCount;
     // Assume regression

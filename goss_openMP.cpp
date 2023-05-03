@@ -74,8 +74,8 @@ void check_correctness(std::vector<int> &indicies, std::vector<float> &gradients
 }
 
 int main(int argc, char* argv[]) {
-    int NumberCount = 400000;
-    int minimum = 0, maximum = 1000;
+    int NumberCount = 61700000;
+    int minimum = 0, maximum = 1000000;
     float a = 0.2, b = 0.2;
     int topN = a * NumberCount, randN = b * NumberCount;
     // Assume regression
@@ -88,7 +88,7 @@ int main(int argc, char* argv[]) {
     double t1 = timer1.elapsed();
     
     Timer timer2;
-    int numPartition = 5;
+    int numPartition = 0;
     int dataPerPartition = NumberCount / numPartition;
     std::vector<int> splittingPoints(numPartition + 1);
     for (int i = 0; i < numPartition; i++) {

@@ -61,6 +61,33 @@ void kWayMerge(int k, int dataPerPartition, std::vector<int> &indicies, std::vec
     indicies = result;
 }
 
+void kWayMerge2(int k, int dataPerPartition, std::vector<int> &indicies, std::vector<float> &gradients, std::vector<int> &splittingPoints) {
+    std::vector<int> result(indicies.size());
+    int curr_idx = 0;
+    auto cmp = [](std::pair<float, int> left, std::pair<float, int> right) { return left.first < right.first; };
+    std::priority_queue<std::pair<float, int>, std::vector<std::pair<float, int> >, decltype(cmp)> min_heap(cmp);
+    std::vector<int> curr_indices(k);
+    for (int i = 0; i < k; i++) {
+        curr_indices[i] = splittingPoints[i] + 1;
+        int index = indicies[splittingPoints[i]];
+        min_heap.push(std::make_pair(gradients[index], index));
+    }
+    while (!min_heap.empty()) {
+        std::pair<float, int> top = min_heap.top();
+        min_heap.pop();
+        result[curr_idx] = top.second;
+        curr_idx++;
+        int partitionIndex = top.second / dataPerPartition;
+        partitionIndex = partitionIndex == k + 1 ? k : partitionIndex;
+        if (curr_indices[partitionIndex] < splittingPoints[partitionIndex + 1]) {
+            int index = indicies[curr_indices[partitionIndex]];
+            min_heap.push(std::make_pair(gradients[index], index));
+            curr_indices[partitionIndex]++;
+        }
+    }
+    indicies = result;
+}
+
 void check_correctness(std::vector<int> &indicies, std::vector<float> &gradients, int NumberCount) {
     std::vector<int> answer_indices(NumberCount);
     iota(answer_indices.begin(), answer_indices.end(), 0);
@@ -82,8 +109,8 @@ int main(int argc, char* argv[]) {
     // Get total number of processes specificed at start of run
     MPI_Comm_size(MPI_COMM_WORLD, &nproc);
 
-    int NumberCount = 400000;
-    int minimum = 0, maximum = 1000;
+    int NumberCount = 100000;
+    int minimum = 0, maximum = 1000000;
     float a = 0.2, b = 0.2;
     int topN = a * NumberCount, randN = b * NumberCount;
 
@@ -95,9 +122,9 @@ int main(int argc, char* argv[]) {
         predictions = read_inputs(NumberCount, minimum, maximum);
         train = read_inputs(NumberCount, minimum, maximum);
     }
+    Timer timer6;
     std::vector<float> gradients(NumberCount);
 
-    Timer timer6;
     int recvcounts[nproc];
     int displs[nproc];
     int itemPerNode = NumberCount / nproc;
@@ -129,14 +156,32 @@ int main(int argc, char* argv[]) {
     
     Timer timer2;
     std::vector<int> indices(NumberCount);
-    std::vector<int> priv_indices(recvcounts[pid]);
+    /* std::vector<int> priv_indices(recvcounts[pid]);
     iota(priv_indices.begin(), priv_indices.end(), displs[pid]);
     int begin = displs[pid];
-    std::stable_sort(priv_indices.begin(), priv_indices.end(), [&](size_t i1, size_t i2) {return private_grad[i1 - begin] > private_grad[i2 - begin];});
+    std::stable_sort(priv_indices.begin(), priv_indices.end(), [&](size_t i1, size_t i2) {return private_grad[i1 - begin] > private_grad[i2 - begin];}); */
+
+    int numPartition = 5;
+    int dataPerPartition = recvcounts[pid] / numPartition;
+    int begin = displs[pid];
+    std::vector<int> splittingPoints(numPartition + 1);
+    for (int i = 0; i < numPartition; i++) {
+        splittingPoints[i] = i * dataPerPartition;
+    }
+    splittingPoints[numPartition] = recvcounts[pid];
+    std::vector<int> priv_indices(recvcounts[pid]);
+    #pragma omp parallel for schedule(static) 
+    for (int i = 0; i < numPartition; i++) {
+        iota(priv_indices.begin() + splittingPoints[i], priv_indices.begin() + splittingPoints[i+1], splittingPoints[i]);
+        std::stable_sort(priv_indices.begin() + splittingPoints[i], priv_indices.begin() + splittingPoints[i+1], [&](size_t i1, size_t i2) {return private_grad[i1 - begin] > private_grad[i2 - begin];});
+    }
+    kWayMerge2(numPartition, dataPerPartition, priv_indices, private_grad, splittingPoints);
+    double t2 = timer2.elapsed();
+    Timer timer7;
     MPI_Gatherv(static_cast<void*>(priv_indices.data()), recvcounts[pid], MPI_INT,
                 static_cast<void*>(indices.data()), recvcounts, displs,
                 MPI_INT, 0, MPI_COMM_WORLD);
-    double t2 = timer2.elapsed();
+    double t7 = timer7.elapsed();
 
     if (pid == 0) {
 
@@ -145,7 +190,7 @@ int main(int argc, char* argv[]) {
         // iota(indices.begin(), indices.end(), 0);
         // std::stable_sort(indices.begin(), indices.end(), [&gradients](size_t i1, size_t i2) {return gradients[i1] > gradients[i2];});
         double t3 = timer3.elapsed();
-        // check_correctness(indices, gradients, NumberCount);
+        check_correctness(indices, gradients, NumberCount);
         
         Timer timer4;
         std::vector<int> randSet;
@@ -157,9 +202,10 @@ int main(int argc, char* argv[]) {
         getUsedSet(usedSet, indices, randSet, topN, randN);
         double t5 = timer5.elapsed();
 
-        printf("TOTAL TIME  : %.6fs\n", t1 + t2 + t3 + t4 + t5 + t6);
+        printf("TOTAL TIME  : %.6fs\n", t1 + t2 + t3 + t4 + t5 + t6 + t7);
         printf("Compute grad: %.6fs\n", t1);
         printf("Sort by grad: %.6fs\n", t2);
+        printf("gather sorted inputs : %.6fs\n", t7);
         printf("k way merge: %.6fs\n", t3);
         printf("Sampling    : %.6fs\n", t4);
         printf("New dataset : %.6fs\n", t5);
