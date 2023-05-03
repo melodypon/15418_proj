@@ -152,7 +152,7 @@ int main(int argc, char* argv[]) {
                  MPI_FLOAT, static_cast<void*>(private_train.data()), recvcounts[pid],
                  MPI_FLOAT, 0, MPI_COMM_WORLD);
     double t8 = timer8.elapsed();
-    std::cerr << "reached1\n";
+    // std::cerr << "reached1\n";
     compute_L2_gradients(private_pred, private_train, private_grad);
     Timer timer9;
     MPI_Gatherv(static_cast<void*>(private_grad.data()), recvcounts[pid], MPI_FLOAT,
@@ -160,7 +160,7 @@ int main(int argc, char* argv[]) {
                 MPI_FLOAT, 0, MPI_COMM_WORLD);
     double t9 = timer9.elapsed();
     double t1 = timer1.elapsed();
-    std::cerr << "reached2\n";
+    // std::cerr << "reached2\n";
     
     Timer timer2;
     std::vector<int> indices(NumberCount);
@@ -178,31 +178,31 @@ int main(int argc, char* argv[]) {
     }
     splittingPoints[numPartition] = recvcounts[pid];
     std::vector<int> priv_indices(recvcounts[pid]);
-    std::cerr << "reached3\n";
+    // std::cerr << "reached3\n";
     #pragma omp parallel for schedule(static) 
     for (int i = 0; i < numPartition; i++) {
         iota(priv_indices.begin() + splittingPoints[i], priv_indices.begin() + splittingPoints[i+1], displs[pid] + splittingPoints[i]);
         std::stable_sort(priv_indices.begin() + splittingPoints[i], priv_indices.begin() + splittingPoints[i+1], [&](size_t i1, size_t i2) {return private_grad[i1 - begin] > private_grad[i2 - begin];});
     }
-    std::cerr << "reached4\n";
+    // std::cerr << "reached4\n";
     kWayMerge2(numPartition, dataPerPartition, priv_indices, private_grad, splittingPoints, begin);
     double t2 = timer2.elapsed();
     Timer timer7;
-    std::cerr << "reached5\n";
+    // std::cerr << "reached5\n";
     MPI_Gatherv(static_cast<void*>(priv_indices.data()), recvcounts[pid], MPI_INT,
                 static_cast<void*>(indices.data()), recvcounts, displs,
                 MPI_INT, 0, MPI_COMM_WORLD);
     double t7 = timer7.elapsed();
-    std::cerr << "reached6\n";
+    // std::cerr << "reached6\n";
     if (pid == 0) {
-        std::cerr << "reached7\n";
+        // std::cerr << "reached7\n";
         Timer timer3;
         kWayMerge(nproc, itemPerNode, indices, gradients, displs, recvcounts);
         // iota(indices.begin(), indices.end(), 0);
         // std::stable_sort(indices.begin(), indices.end(), [&gradients](size_t i1, size_t i2) {return gradients[i1] > gradients[i2];});
         double t3 = timer3.elapsed();
         // check_correctness(indices, gradients, NumberCount);
-        std::cerr << "reached8\n";
+        // std::cerr << "reached8\n";
         Timer timer4;
         std::vector<int> randSet;
         std::vector<int> usedSet(topN + randN);
